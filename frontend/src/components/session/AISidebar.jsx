@@ -9,8 +9,10 @@ export default function AISidebar({ userRole, subject, send, on, speech }) {
     isListening,
     transcript,
     interimText,
+    error: speechError,
     start,
     stop,
+    addNote,
     onChunk,
     getRecentTranscript,
   } = speech;
@@ -122,7 +124,9 @@ export default function AISidebar({ userRole, subject, send, on, speech }) {
             transcript={transcript}
             interimText={interimText}
             isListening={isListening}
+            error={speechError}
             onToggle={handleToggleListening}
+            onAddNote={addNote}
           />
         )}
         {activeTab === "concepts" && (

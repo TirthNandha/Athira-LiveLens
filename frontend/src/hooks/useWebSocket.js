@@ -1,5 +1,7 @@
 import { useRef, useEffect, useCallback, useState } from "react";
 
+let connectionId = 0;
+
 export default function useWebSocket(sessionId) {
   const wsRef = useRef(null);
   const listenersRef = useRef(new Map());
@@ -10,6 +12,8 @@ export default function useWebSocket(sessionId) {
     const token = localStorage.getItem("athira_token");
     if (!token || !sessionId) return;
 
+    const myId = ++connectionId;
+
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
     const host = window.location.host;
     const url = `${protocol}://${host}/api/ws/session/${sessionId}?token=${token}`;
@@ -18,21 +22,21 @@ export default function useWebSocket(sessionId) {
     let ws = null;
 
     const doConnect = () => {
-      if (disposed) return;
+      if (disposed || myId !== connectionId) return;
 
-      // Close any previous socket before opening a new one
       if (ws) {
-        try { ws.onclose = null; ws.close(); } catch {}
+        try { ws.onclose = null; ws.onerror = null; ws.close(); } catch {}
       }
 
       ws = new WebSocket(url);
       wsRef.current = ws;
 
       ws.onopen = () => {
-        if (!disposed) setConnected(true);
+        if (!disposed && myId === connectionId) setConnected(true);
       };
 
       ws.onmessage = (event) => {
+        if (disposed || myId !== connectionId) return;
         try {
           const msg = JSON.parse(event.data);
           const handlers = listenersRef.current.get(msg.type);
@@ -44,26 +48,27 @@ export default function useWebSocket(sessionId) {
         }
       };
 
-      ws.onclose = (event) => {
-        if (disposed) return;
+      ws.onclose = () => {
+        if (disposed || myId !== connectionId) return;
         setConnected(false);
-        // Code 4000 = replaced by a newer connection from the same user; don't reconnect
-        if (event.code === 4000) return;
         reconnectTimer.current = setTimeout(doConnect, 2000);
       };
 
-      ws.onerror = () => {
-        if (ws.readyState !== WebSocket.CLOSED) ws.close();
-      };
+      ws.onerror = () => {};
     };
 
     doConnect();
 
     return () => {
       disposed = true;
-      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      if (reconnectTimer.current) {
+        clearTimeout(reconnectTimer.current);
+        reconnectTimer.current = null;
+      }
       if (ws) {
         ws.onclose = null;
+        ws.onerror = null;
+        ws.onmessage = null;
         ws.close();
       }
       wsRef.current = null;

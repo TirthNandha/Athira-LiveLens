@@ -7,13 +7,6 @@ router = APIRouter()
 
 
 class RoomManager:
-    """Manages WebSocket connections per session room.
-
-    Uses (user_id, ws) identity so that a reconnecting user doesn't clobber
-    their own previous socket — each socket is tracked independently via its
-    object id, preventing the old-socket-teardown-removes-new-socket race.
-    """
-
     def __init__(self):
         self.rooms: dict[str, dict[int, tuple[str, WebSocket]]] = {}
 
@@ -22,15 +15,11 @@ class RoomManager:
         if session_id not in self.rooms:
             self.rooms[session_id] = {}
         old_ids = [
-            wid for wid, (uid, _) in self.rooms[session_id].items()
+            wid for wid, (uid, _) in list(self.rooms[session_id].items())
             if uid == user_id
         ]
         for wid in old_ids:
-            _, old_ws = self.rooms[session_id].pop(wid)
-            try:
-                await old_ws.close(code=4000, reason="Replaced by new connection")
-            except Exception:
-                pass
+            self.rooms[session_id].pop(wid, None)
         self.rooms[session_id][id(ws)] = (user_id, ws)
 
     def disconnect(self, session_id: str, ws: WebSocket):
@@ -42,9 +31,12 @@ class RoomManager:
             del self.rooms[session_id]
 
     async def broadcast(self, session_id: str, sender_ws: WebSocket, message: str):
-        room = self.rooms.get(session_id, {})
+        room = self.rooms.get(session_id)
+        if not room:
+            return
+        snapshot = list(room.items())
         stale = []
-        for wid, (uid, ws) in room.items():
+        for wid, (uid, ws) in snapshot:
             if ws is not sender_ws:
                 try:
                     await ws.send_text(message)
@@ -54,9 +46,12 @@ class RoomManager:
             room.pop(wid, None)
 
     async def broadcast_all(self, session_id: str, message: str):
-        room = self.rooms.get(session_id, {})
+        room = self.rooms.get(session_id)
+        if not room:
+            return
+        snapshot = list(room.items())
         stale = []
-        for wid, (uid, ws) in room.items():
+        for wid, (uid, ws) in snapshot:
             try:
                 await ws.send_text(message)
             except Exception:
