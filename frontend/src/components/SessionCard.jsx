@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 const STATUS_STYLES = {
   pending: "bg-yellow-100 text-yellow-800",
   accepted: "bg-green-100 text-green-800",
@@ -68,6 +70,15 @@ export default function SessionCard({ session, role, onAccept, onReject }) {
             Reject
           </button>
         </div>
+      )}
+
+      {session.status === "accepted" && (
+        <Link
+          to={`/session/${session.id}`}
+          className="mt-4 block text-center py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 transition-colors"
+        >
+          Join Session
+        </Link>
       )}
     </div>
   );

@@ -5,6 +5,7 @@ import Login from "./pages/Login";
 import StudentDashboard from "./pages/StudentDashboard";
 import TutorDashboard from "./pages/TutorDashboard";
 import SessionRequest from "./pages/SessionRequest";
+import SessionRoom from "./pages/SessionRoom";
 
 function RootRedirect() {
   const { user } = useAuth();
@@ -39,6 +40,14 @@ export default function App() {
             element={
               <ProtectedRoute allowedRole="tutor">
                 <TutorDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/session/:sessionId"
+            element={
+              <ProtectedRoute>
+                <SessionRoom />
               </ProtectedRoute>
             }
           />
