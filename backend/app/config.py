@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     jwt_secret: str = "athira-dev-secret-key-change-in-production"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 480  # 8 hours
+    openrouter_api_key: str = ""
 
     class Config:
         env_file = ".env"

@@ -7,43 +7,62 @@ router = APIRouter()
 
 
 class RoomManager:
+    """Manages WebSocket connections per session room.
+
+    Uses (user_id, ws) identity so that a reconnecting user doesn't clobber
+    their own previous socket — each socket is tracked independently via its
+    object id, preventing the old-socket-teardown-removes-new-socket race.
+    """
+
     def __init__(self):
-        self.rooms: dict[str, dict[str, WebSocket]] = {}
+        self.rooms: dict[str, dict[int, tuple[str, WebSocket]]] = {}
 
     async def connect(self, session_id: str, user_id: str, ws: WebSocket):
         await ws.accept()
         if session_id not in self.rooms:
             self.rooms[session_id] = {}
-        self.rooms[session_id][user_id] = ws
+        old_ids = [
+            wid for wid, (uid, _) in self.rooms[session_id].items()
+            if uid == user_id
+        ]
+        for wid in old_ids:
+            _, old_ws = self.rooms[session_id].pop(wid)
+            try:
+                await old_ws.close(code=4000, reason="Replaced by new connection")
+            except Exception:
+                pass
+        self.rooms[session_id][id(ws)] = (user_id, ws)
 
-    def disconnect(self, session_id: str, user_id: str):
-        if session_id in self.rooms:
-            self.rooms[session_id].pop(user_id, None)
-            if not self.rooms[session_id]:
-                del self.rooms[session_id]
+    def disconnect(self, session_id: str, ws: WebSocket):
+        room = self.rooms.get(session_id)
+        if not room:
+            return
+        room.pop(id(ws), None)
+        if not room:
+            del self.rooms[session_id]
 
-    async def broadcast(self, session_id: str, sender_id: str, message: str):
+    async def broadcast(self, session_id: str, sender_ws: WebSocket, message: str):
         room = self.rooms.get(session_id, {})
         stale = []
-        for uid, ws in room.items():
-            if uid != sender_id:
+        for wid, (uid, ws) in room.items():
+            if ws is not sender_ws:
                 try:
                     await ws.send_text(message)
                 except Exception:
-                    stale.append(uid)
-        for uid in stale:
-            self.disconnect(session_id, uid)
+                    stale.append(wid)
+        for wid in stale:
+            room.pop(wid, None)
 
     async def broadcast_all(self, session_id: str, message: str):
         room = self.rooms.get(session_id, {})
         stale = []
-        for uid, ws in room.items():
+        for wid, (uid, ws) in room.items():
             try:
                 await ws.send_text(message)
             except Exception:
-                stale.append(uid)
-        for uid in stale:
-            self.disconnect(session_id, uid)
+                stale.append(wid)
+        for wid in stale:
+            room.pop(wid, None)
 
 
 manager = RoomManager()
@@ -81,13 +100,13 @@ async def session_websocket(websocket: WebSocket, session_id: str, token: str = 
         "type": "user:joined",
         "data": {"user_id": user_id, "role": user["role"], "email": user["email"]},
     })
-    await manager.broadcast(session_id, user_id, join_msg)
+    await manager.broadcast(session_id, websocket, join_msg)
 
     try:
         while True:
             raw = await websocket.receive_text()
             try:
-                await manager.broadcast(session_id, user_id, raw)
+                await manager.broadcast(session_id, websocket, raw)
             except Exception as e:
                 print(f"WS broadcast error: {e}")
     except WebSocketDisconnect:
@@ -95,7 +114,7 @@ async def session_websocket(websocket: WebSocket, session_id: str, token: str = 
     except Exception as e:
         print(f"WS unexpected error: {e}")
     finally:
-        manager.disconnect(session_id, user_id)
+        manager.disconnect(session_id, websocket)
         leave_msg = json.dumps({
             "type": "user:left",
             "data": {"user_id": user_id, "role": user["role"]},

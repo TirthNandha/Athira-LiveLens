@@ -9,6 +9,12 @@ export default defineConfig({
         target: 'ws://localhost:8000',
         ws: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
+        configure: (proxy) => {
+          proxy.on('error', () => {});
+          proxy.on('proxyReqWs', (_proxyReq, _req, socket) => {
+            socket.on('error', () => {});
+          });
+        },
       },
       '/api': {
         target: 'http://localhost:8000',

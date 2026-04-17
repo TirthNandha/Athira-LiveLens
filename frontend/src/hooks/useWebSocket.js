@@ -5,8 +5,6 @@ export default function useWebSocket(sessionId) {
   const listenersRef = useRef(new Map());
   const [connected, setConnected] = useState(false);
   const reconnectTimer = useRef(null);
-  const sessionIdRef = useRef(sessionId);
-  sessionIdRef.current = sessionId;
 
   useEffect(() => {
     const token = localStorage.getItem("athira_token");
@@ -16,15 +14,23 @@ export default function useWebSocket(sessionId) {
     const host = window.location.host;
     const url = `${protocol}://${host}/api/ws/session/${sessionId}?token=${token}`;
 
-    let ws;
     let disposed = false;
+    let ws = null;
 
     const doConnect = () => {
       if (disposed) return;
+
+      // Close any previous socket before opening a new one
+      if (ws) {
+        try { ws.onclose = null; ws.close(); } catch {}
+      }
+
       ws = new WebSocket(url);
       wsRef.current = ws;
 
-      ws.onopen = () => setConnected(true);
+      ws.onopen = () => {
+        if (!disposed) setConnected(true);
+      };
 
       ws.onmessage = (event) => {
         try {
@@ -38,14 +44,17 @@ export default function useWebSocket(sessionId) {
         }
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
+        if (disposed) return;
         setConnected(false);
-        if (!disposed) {
-          reconnectTimer.current = setTimeout(doConnect, 2000);
-        }
+        // Code 4000 = replaced by a newer connection from the same user; don't reconnect
+        if (event.code === 4000) return;
+        reconnectTimer.current = setTimeout(doConnect, 2000);
       };
 
-      ws.onerror = () => ws.close();
+      ws.onerror = () => {
+        if (ws.readyState !== WebSocket.CLOSED) ws.close();
+      };
     };
 
     doConnect();
@@ -53,10 +62,12 @@ export default function useWebSocket(sessionId) {
     return () => {
       disposed = true;
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-      if (wsRef.current) {
-        wsRef.current.onclose = null;
-        wsRef.current.close();
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
       }
+      wsRef.current = null;
+      setConnected(false);
     };
   }, [sessionId]);
 

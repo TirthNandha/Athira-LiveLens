@@ -5,3 +5,4 @@ python-jose[cryptography]
 bcrypt
 pydantic-settings
 python-dotenv
+httpx

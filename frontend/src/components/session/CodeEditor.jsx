@@ -119,10 +119,6 @@ export default function CodeEditor({ send, on, onRun, running }) {
     const ytext = ydoc.getText("monaco");
     const model = editor.getModel();
 
-    if (ytext.length === 0) {
-      ytext.insert(0, "# Write your Python code here\nprint('Hello, Athira!')\n");
-    }
-
     model.setValue(ytext.toString());
 
     bindingRef.current = new MonacoBinding(
