@@ -49,6 +49,24 @@ def get_current_user(
         )
 
 
+def decode_token(token: str) -> dict | None:
+    """Decode a JWT string without HTTP context. Returns user dict or None."""
+    try:
+        payload = jwt.decode(
+            token, settings.jwt_secret, algorithms=[settings.jwt_algorithm]
+        )
+        user_id = payload.get("user_id")
+        if user_id is None:
+            return None
+        return {
+            "user_id": user_id,
+            "email": payload.get("email"),
+            "role": payload.get("role"),
+        }
+    except JWTError:
+        return None
+
+
 def authenticate_user(email: str, password: str) -> dict:
     result = (
         supabase.table("users").select("*").eq("email", email).execute()
