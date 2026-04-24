@@ -378,9 +378,3 @@ The session room is designed around the principle that **active participation be
 | `JWT_ALGORITHM` | No | `HS256` | JWT algorithm |
 | `JWT_EXPIRE_MINUTES` | No | `480` (8 hours) | Token expiry |
 | `OPENROUTER_API_KEY` | For AI features | `""` | OpenRouter API key for LLM access |
-
----
-
-## License
-
-This project was built for the Athira EdTech hackathon challenge.
